@@ -1,5 +1,6 @@
 import os
 from os.path import exists
+import shutil
 import sys
 import openpyxl as pyxl
 from pandas import describe_option
@@ -27,46 +28,79 @@ def resource_path(relative_path):
 
 # return all dollar values found given in the dom text
 def parse_dollars(dom_text):
-    # arr_dom_text = dom_text.split()
-    # dollar_strs = []
-    # for text in arr_dom_text:
-    #     if text[0] == "$":
-    #         dollar_strs.append(text[1:])
+    arr_dom_text = dom_text.split()
+    dollar_strs = []
+    for text in arr_dom_text:
+        if text[0] == "$":
+            dollar_strs.append(text[1:])
     
-    # acceptable_chars = {"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", ","}
-    # dollar_values = []
-    # for dollar_str in dollar_strs:
-    #     i = 0
-    #     while i < len(dollar_str) and dollar_str[i] in acceptable_chars:
-    #         i += 1
-    #     i -= 1
-    #     # extract numerical value
-    #     multiplier = 1
-    #     value = 0
-    #     while i >= 0:
-    #         if dollar_str[i] == ",":
-    #             i -= 1
-    #             continue
-    #         else:
-    #             value += multiplier * int(dollar_str[i])
-    #             multiplier *= 10
-    #             i -= 1
-    #     dollar_values.append(value)
+    acceptable_chars = {"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", ","}
+    dollar_values = []
+    for dollar_str in dollar_strs:
+        i = 0
+        while i < len(dollar_str) and dollar_str[i] in acceptable_chars:
+            i += 1
+        i -= 1
+        # extract numerical value
+        multiplier = 1
+        value = 0
+        while i >= 0:
+            if dollar_str[i] == ",":
+                i -= 1
+                continue
+            else:
+                value += multiplier * int(dollar_str[i])
+                multiplier *= 10
+                i -= 1
+        dollar_values.append(round(value, 2))
     
-    return 1
+    return dollar_values
 
 # return all dollar values converted to per hour in the given dom text
 def parse_timed_dollars(dom_text):
-    return 1  
+    arr_dom_text = dom_text.split()
+    dollar_strs = []
+    per_times = []
+    for i, text in enumerate(arr_dom_text):
+        if text[0] == "$":
+            if i+5 <= len(arr_dom_text):
+                following_str = ' '.join(arr_dom_text[i:i+5])
+            else:
+                following_str = ' '.join(arr_dom_text[i:])
+            if "hour" in following_str or "hr" in following_str:
+                dollar_strs.append(text[1:])
+                per_times += [1]
+            elif "day" in following_str:
+                dollar_strs.append(text[1:])
+                per_times += [24]
+    
+    acceptable_chars = {"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", ","}
+    dollar_values = []
+    for index, dollar_str in enumerate(dollar_strs):
+        i = 0
+        while i < len(dollar_str) and dollar_str[i] in acceptable_chars:
+            i += 1
+        i -= 1
+        # extract numerical value
+        multiplier = 1
+        value = 0
+        while i >= 0:
+            if dollar_str[i] == ",":
+                i -= 1
+                continue
+            else:
+                value += multiplier * int(dollar_str[i])
+                multiplier *= 10
+                i -= 1
+        dollar_values.append(round(value / per_times[index], 2))
+    
+    return dollar_values 
 
 # scrape data online for item in row i and set the sourced value
 def scrape_sourced_value(row):
     # get variables from excel sheet
-    wb = pyxl.load_workbook('equipment rates.xlsx')
-    if "General" in wb.sheetnames:
-        ws = wb["General"]
-    else:
-        print("Error: worksheet is named incorrectly")
+    wb = pyxl.load_workbook('equipment rates new.xlsx', data_only=True)
+    ws = wb["General"]
     year = ws[f'B{row}'].value
     description = ws[f'C{row}'].value
     manufacturer = ws[f'E{row}'].value
@@ -116,8 +150,10 @@ def scrape_sourced_value(row):
         threads[i].join()
 
     # save found value to excel
-    ws[f'BB{i}'] = sum(sourced_values) / len(sourced_values) if len(sourced_values) > 0 else -1
-    wb.save('equipment rates.xlsx')
+    # ws[f'BB{row}'] = sum(sourced_values) / len(sourced_values) if len(sourced_values) > 0 else -1
+    sourced_values.sort()
+    ws[f'BB{row}'] = str(sourced_values)
+    wb.save('equipment rates new.xlsx')
     wb.close()
 
     return 1
@@ -125,11 +161,8 @@ def scrape_sourced_value(row):
 # scrape data online for item in row row and set the sourced rental rate
 def scrape_sourced_rental_rate(row):
     # get variables from excel sheet
-    wb = pyxl.load_workbook('equipment rates.xlsx')
-    if "General" in wb.sheetnames:
-        ws = wb["General"]
-    else:
-        print("Error: worksheet is named incorrectly")
+    wb = pyxl.load_workbook('equipment rates new.xlsx', data_only=True)
+    ws = wb["General"]
     year = ws[f'B{row}'].value
     description = ws[f'C{row}'].value
     manufacturer = ws[f'E{row}'].value
@@ -180,8 +213,10 @@ def scrape_sourced_rental_rate(row):
         threads[i].join()
 
     # save found rental rate to excel
-    ws[f'BC{i}'] = sum(sourced_rental_rates) / len(sourced_rental_rates) if len(sourced_rental_rates) > 0 else -1
-    wb.save('equipment rates.xlsx')
+    # ws[f'BC{row}'] = sum(sourced_rental_rates) / len(sourced_rental_rates) if len(sourced_rental_rates) > 0 else -1
+    sourced_rental_rates.sort()
+    ws[f'BC{row}'] = str(sourced_rental_rates)
+    wb.save('equipment rates new.xlsx')
     wb.close()
 
     return 1
@@ -204,21 +239,24 @@ def main():
     print("    - Expect to wait several hours\n")
     print("    - Refer to rental_pricing_guide.pdf for details\n\n")
     print("Starting in 10 seconds")
-    time.sleep(10)
+    # time.sleep(10)
 
+    # copy excel sheet to new sheet
+    original = r'equipment rates.xlsx'
+    target = r'equipment rates new.xlsx'
+    if not exists(target):
+        shutil.copyfile(original, target)
+    
     # get data from 'Equipment New List.xlsx'
-    wb = pyxl.load_workbook('equipment rates.xlsx')
-    if "General" in wb.sheetnames:
-        ws = wb["General"]
-    else:
-        print("Error: worksheet is named incorrectly")
+    wb = pyxl.load_workbook('equipment rates new.xlsx')
+    ws = wb["General"]
     n = ws.max_row - OFFSET_ROWS
     wb.close()
 
     # num_to_scrape = n
-    num_to_scrape = 2
+    num_to_scrape = 8
     for row in range(OFFSET, num_to_scrape + OFFSET):
-        scrape_sourced_value(row)
+        # scrape_sourced_value(row)
         scrape_sourced_rental_rate(row)
 
     print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
