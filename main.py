@@ -4,27 +4,25 @@ import shutil
 import sys
 import openpyxl as pyxl
 from pandas import describe_option
-from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
 from threading import Thread
 import time
+import math
+import numpy as np
+import bisect
+
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service as ChromeService
+from webdriver_manager.chrome import ChromeDriverManager
 
 # INPUT/ CONSTANTS
 HEADLESS = False # if running with chrome browser showing (more results when false, but takes longer)
 
 OFFSET = 2 # excel input data is offset by 2: 1 for 0 indexing and 1 for a row of titles
 OFFSET_ROWS = 1 # excel input data has 2 extra rows: first is headers
-
-# returns resource path for users environment given the relative path
-def resource_path(relative_path):
-    try:
-        base_path = sys._MEIPASS
-    except Exception:
-        base_path = os.path.dirname(__file__)
-    return os.path.join(base_path, relative_path)
 
 # return all dollar values found given in the dom text
 def parse_dollars(dom_text):
@@ -53,7 +51,6 @@ def parse_dollars(dom_text):
                 multiplier *= 10
                 i -= 1
         dollar_values.append(round(value, 2))
-    
     return dollar_values
 
 # return all dollar values converted to per hour in the given dom text
@@ -93,14 +90,14 @@ def parse_timed_dollars(dom_text):
                 multiplier *= 10
                 i -= 1
         dollar_values.append(round(value / per_times[index], 2))
-    
     return dollar_values 
 
 # scrape data online for item in row i and set the sourced value
 def scrape_sourced_value(row):
     # get variables from excel sheet
-    wb = pyxl.load_workbook('equipment rates new.xlsx', data_only=True)
+    wb = pyxl.load_workbook('temp_delete_me.xlsx', data_only=True)
     ws = wb["General"]
+
     year = ws[f'B{row}'].value
     description = ws[f'C{row}'].value
     manufacturer = ws[f'E{row}'].value
@@ -109,6 +106,8 @@ def scrape_sourced_value(row):
     given_value = None if not ws[f'W{row}'].value else float(ws[f'W{row}'].value)
     given_operating_rate = None if not ws[f'H{row}'].value else float(ws[f'H{row}'].value)
     given_standby_rate = None if not ws[f'J{row}'].value else float(ws[f'J{row}'].value)
+
+    wb.close()
 
     # if sourced value already found, return -1
     if sourced_value:
@@ -120,7 +119,7 @@ def scrape_sourced_value(row):
         chrome_options = Options()
         if HEADLESS:
             chrome_options.add_argument("--headless")
-        driver = webdriver.Chrome(resource_path('./chromedriver_win32/chromedriver.exe'), options=chrome_options)
+        driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=chrome_options)
         driver.get(address)
         
         try:
@@ -149,20 +148,36 @@ def scrape_sourced_value(row):
     for i in range(8):
         threads[i].join()
 
-    # save found value to excel
-    # ws[f'BB{row}'] = sum(sourced_values) / len(sourced_values) if len(sourced_values) > 0 else -1
+    # prepare for output
+    wb = pyxl.load_workbook('equipment rates.xlsx')
+    ws = wb["General"]
+
+    # corner case: insufficient data found
     sourced_values.sort()
-    ws[f'BB{row}'] = str(sourced_values)
-    wb.save('equipment rates new.xlsx')
+    sourced_values = sourced_values[bisect.bisect_right(sourced_values, 200):] # remove all vals less than 200
+    if len(sourced_values) < 3:
+        ws[f'BB{row}'] = "Insufficient data available online"
+        wb.save('equipment rates.xlsx')
+        wb.close()
+        return 0
+
+    # save found value to excel
+
+    # mean of the middle 50% of found values
+    sourced_value = round(np.mean(sourced_values[math.floor(len(sourced_values)*0.25):math.floor(len(sourced_values)*0.5)]),2)
+    
+    ws[f'BB{row}'] = str(sourced_value)
+    wb.save('equipment rates.xlsx')
     wb.close()
 
     return 1
 
 # scrape data online for item in row row and set the sourced rental rate
-def scrape_sourced_rental_rate(row):
+def scrape_sourced_rental_rate(row, location):
     # get variables from excel sheet
-    wb = pyxl.load_workbook('equipment rates new.xlsx', data_only=True)
+    wb = pyxl.load_workbook('temp_delete_me.xlsx', data_only=True)
     ws = wb["General"]
+
     year = ws[f'B{row}'].value
     description = ws[f'C{row}'].value
     manufacturer = ws[f'E{row}'].value
@@ -171,6 +186,7 @@ def scrape_sourced_rental_rate(row):
     given_value = None if not ws[f'W{row}'].value else float(ws[f'W{row}'].value)
     given_operating_rate = None if not ws[f'H{row}'].value else float(ws[f'H{row}'].value)
     given_standby_rate = None if not ws[f'J{row}'].value else float(ws[f'J{row}'].value)
+
     wb.close()
 
     # if sourced rental rate already found, return -1
@@ -183,7 +199,7 @@ def scrape_sourced_rental_rate(row):
         chrome_options = Options()
         if HEADLESS:
             chrome_options.add_argument("--headless")
-        driver = webdriver.Chrome(resource_path('./chromedriver_win32/chromedriver.exe'), options=chrome_options)
+        driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=chrome_options)
         driver.get(address)
         
         try:
@@ -199,24 +215,68 @@ def scrape_sourced_rental_rate(row):
             driver.close()
             driver.quit()
     threads = [None] * 8
-    threads[0] = Thread(target=scrape_task, args=(f"https://usedequipmentguide.com/listings?query=how much does it cost to rent a {description} {manufacturer} {year}", sourced_rental_rates))
-    threads[1] = Thread(target=scrape_task, args=(f"https://www.bing.com/search?q=how much does it cost to rent a {description} {manufacturer} {year}", sourced_rental_rates))
-    threads[2] = Thread(target=scrape_task, args=(f"https://swisscows.com/web?query=how much does it cost to rent a {description} {manufacturer} {year}", sourced_rental_rates))
-    threads[3] = Thread(target=scrape_task, args=(f"https://duckduckgo.com/?q=how much does it cost to rent a {description} {manufacturer} {year}&ia=web", sourced_rental_rates))
-    threads[4] = Thread(target=scrape_task, args=(f"https://search.givewater.com/serp?q=how much does it cost to rent a {description} {manufacturer} {year}", sourced_rental_rates))
-    threads[5] = Thread(target=scrape_task, args=(f"https://ekoru.org/?q=how much does it cost to rent a {description} {manufacturer} {year}", sourced_rental_rates))
-    threads[6] = Thread(target=scrape_task, args=(f"https://www.ecosia.org/search?method=index&q=how much does it cost to rent a {description} {manufacturer} {year}", sourced_rental_rates))
-    threads[7] = Thread(target=scrape_task, args=(f"https://www.google.com/search?q=how much does it cost to rent a {description} {manufacturer} {year}", sourced_rental_rates))
+    threads[0] = Thread(target=scrape_task, args=(f"https://usedequipmentguide.com/listings?query=how much does it cost to rent a {description} {manufacturer} {year} in {location}", sourced_rental_rates))
+    threads[1] = Thread(target=scrape_task, args=(f"https://www.bing.com/search?q=how much does it cost to rent a {description} {manufacturer} {year} in {location}", sourced_rental_rates))
+    threads[2] = Thread(target=scrape_task, args=(f"https://swisscows.com/web?query=how much does it cost to rent a {description} {manufacturer} {year} in {location}", sourced_rental_rates))
+    threads[3] = Thread(target=scrape_task, args=(f"https://duckduckgo.com/?q=how much does it cost to rent a {description} {manufacturer} {year} in {location}&ia=web", sourced_rental_rates))
+    threads[4] = Thread(target=scrape_task, args=(f"https://search.givewater.com/serp?q=how much does it cost to rent a {description} {manufacturer} {year} in {location}", sourced_rental_rates))
+    threads[5] = Thread(target=scrape_task, args=(f"https://ekoru.org/?q=how much does it cost to rent a {description} {manufacturer} {year} in {location}", sourced_rental_rates))
+    threads[6] = Thread(target=scrape_task, args=(f"https://www.ecosia.org/search?method=index&q=how much does it cost to rent a {description} {manufacturer} {year} in {location}", sourced_rental_rates))
+    threads[7] = Thread(target=scrape_task, args=(f"https://www.google.com/search?q=how much does it cost to rent a {description} {manufacturer} {year} in {location}", sourced_rental_rates))
     for i in range(8):
         threads[i].start()
     for i in range(8):
         threads[i].join()
 
-    # save found rental rate to excel
-    # ws[f'BC{row}'] = sum(sourced_rental_rates) / len(sourced_rental_rates) if len(sourced_rental_rates) > 0 else -1
+    # prepare for output
+    wb = pyxl.load_workbook('equipment rates.xlsx')
+    ws = wb["General"]
     sourced_rental_rates.sort()
-    ws[f'BC{row}'] = str(sourced_rental_rates)
-    wb.save('equipment rates new.xlsx')
+    sourced_rental_rates = sourced_rental_rates[bisect.bisect_right(sourced_rental_rates, 0):] # remove all 0s and negatives
+
+    # corner case: insufficient data found
+    if len(sourced_rental_rates) < 3:
+        ws[f'BD{row}'] = "Insufficient data available online"
+        wb.save('equipment rates.xlsx')
+        wb.close()
+        return 0
+
+    # save found rental rate to excel
+    # mean of the middle 50% of found values
+    sourced_rental_rate = round(np.mean(sourced_rental_rates[math.floor(len(sourced_rental_rates)*0.25):math.floor(len(sourced_rental_rates)*0.5)]),2)
+    
+    # find if given_operating_rate fits into given data
+    near_average = False
+    is_extreme_small = False
+    is_extreme_big = False
+    if given_operating_rate <= 1.5*sourced_rental_rate and given_operating_rate >= 0.5*sourced_rental_rate:
+        near_average = True
+    if given_operating_rate < sourced_rental_rates[0]:
+        is_extreme_small = True
+    elif given_operating_rate > sourced_rental_rates[-1]:
+        is_extreme_big = True
+    
+    # make recommendation based on fit in data
+    rec = ""
+    if near_average:
+        if is_extreme_small:
+            rec = "Further research required: possible slight increase in pricing"
+        elif is_extreme_big:
+            rec = "Further research required: possible slight decrease in pricing"
+        else:
+            rec = "Data supports pricing"
+    else: # not near average
+        if is_extreme_small:
+            rec = "Consider increase in pricing"
+        elif is_extreme_big:
+            rec = "Consider decrease in pricing"
+        else:
+            # not near average but not an extreme
+            rec = "Further research required: given rate appears to fit data but is not near average rental rate."
+
+    ws[f'BC{row}'] = str(sourced_rental_rate)
+    ws[f'BD{row}'] = rec
+    wb.save('equipment rates.xlsx')
     wb.close()
 
     return 1
@@ -243,21 +303,26 @@ def main():
 
     # copy excel sheet to new sheet
     original = r'equipment rates.xlsx'
-    target = r'equipment rates new.xlsx'
+    target = r'temp_delete_me.xlsx'
     if not exists(target):
         shutil.copyfile(original, target)
     
-    # get data from 'Equipment New List.xlsx'
-    wb = pyxl.load_workbook('equipment rates new.xlsx')
+    # get data from 'temp_delete_me.xlsx'
+    wb = pyxl.load_workbook('temp_delete_me.xlsx')
     ws = wb["General"]
     n = ws.max_row - OFFSET_ROWS
     wb.close()
 
-    # num_to_scrape = n
-    num_to_scrape = 8
+    num_to_scrape = n
+    # num_to_scrape = 30
+    location = "California"
     for row in range(OFFSET, num_to_scrape + OFFSET):
-        # scrape_sourced_value(row)
-        scrape_sourced_rental_rate(row)
+        scrape_sourced_value(row)
+        scrape_sourced_rental_rate(row, location)
+
+    # remove temp_delete_me
+    if os.path.exists(target):
+        os.remove(target)
 
     print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
     print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
