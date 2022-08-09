@@ -25,10 +25,10 @@ Tool for automatically finding current rental prices per hour
     - BI: Date of Program Execution
 
 ### Meaning of Recommendations
-- "Data supports pricing": the data found online supports the given pricing
-- "Insufficient data available online": there is not enough available data online to draw reasonable conclusions
-- "Further research required: possible slight increase/decrease in pricing": The given price fits that data but is not near the median. Further research is required as the online prices found may be linked to simmilar but different type of equipment
-- "Consider increase/decrease in pricing": The given price does not fit the data and is well below the median value. This suggests that the price should change to reflect closer to market values
+- **"Data supports pricing":** the data found online supports the given pricing
+- **"Insufficient data available online":** there is not enough available data online to draw reasonable conclusions
+- **"Further research required: possible slight increase/decrease in pricing":** The given price fits that data but is not near the median. Further research is required as the online prices found may be linked to simmilar but different type of equipment
+- **"Consider increase/decrease in pricing":** The given price does not fit the data and is well below the median value. This suggests that the price should change to reflect closer to market values
 
 ## Creating the Executable for Windows:
 https://www.zacoding.com/en/post/python-selenium-to-exe/
