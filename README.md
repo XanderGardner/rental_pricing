@@ -21,5 +21,5 @@ Tool for automatically finding current rental prices per hour
 ## Creating the Executable for Windows:
 https://www.zacoding.com/en/post/python-selenium-to-exe/
 ```
-pyinstaller ./main.py --onefile --add-binary "./chromedriver_win32/chromedriver.exe;./chromedriver_win32"
+pyinstaller ./main.py --onefile
 ```
