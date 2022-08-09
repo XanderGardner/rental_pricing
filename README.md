@@ -2,6 +2,7 @@
 Tool for automatically finding current rental prices per hour 
 
 ## Input:
+- Sheet in the excel file named *General*
 - Excel File named "equipment rates.xlsx" with columns:
     - B: year
     - C: description
