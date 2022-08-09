@@ -10,6 +10,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
 from threading import Thread
 import time
+from datetime import datetime
 import math
 import numpy as np
 import bisect
@@ -102,7 +103,7 @@ def scrape_sourced_value(row):
     description = ws[f'C{row}'].value
     manufacturer = ws[f'E{row}'].value
     model = ws[f'F{row}'].value
-    sourced_value = None if not ws[f'BB{row}'].value else float(ws[f'BB{row}'].value)
+    sourced_value = 0.0 if not ws[f'BF{row}'].value else float(ws[f'BF{row}'].value)
     given_value = None if not ws[f'W{row}'].value else float(ws[f'W{row}'].value)
     given_operating_rate = None if not ws[f'H{row}'].value else float(ws[f'H{row}'].value)
     given_standby_rate = None if not ws[f'J{row}'].value else float(ws[f'J{row}'].value)
@@ -164,9 +165,12 @@ def scrape_sourced_value(row):
     # save found value to excel
 
     # mean of the middle 50% of found values
-    sourced_value = round(np.mean(sourced_values[math.floor(len(sourced_values)*0.25):math.floor(len(sourced_values)*0.5)]),2)
+    sourced_value = round(np.median(sourced_values),2)
     
-    ws[f'BB{row}'] = str(sourced_value)
+    ws[f'BF{row}'] = str(sourced_value)
+    ws[f'BG{row}'] = str(sourced_values)[1:-1]
+    ws[f'BH{row}'] = f"https://www.google.com/search?q={description} {manufacturer} {year} used price"
+    ws[f'BI{row}'] = str(datetime.now())
     wb.save('equipment rates.xlsx')
     wb.close()
 
@@ -184,7 +188,7 @@ def scrape_sourced_rental_rate(row, location):
     model = ws[f'F{row}'].value
     sourced_rental_rate = None if not ws[f'BC{row}'].value else float(ws[f'BC{row}'].value)
     given_value = None if not ws[f'W{row}'].value else float(ws[f'W{row}'].value)
-    given_operating_rate = None if not ws[f'H{row}'].value else float(ws[f'H{row}'].value)
+    given_operating_rate = 0.0 if not ws[f'H{row}'].value else float(ws[f'H{row}'].value)
     given_standby_rate = None if not ws[f'J{row}'].value else float(ws[f'J{row}'].value)
 
     wb.close()
@@ -236,14 +240,14 @@ def scrape_sourced_rental_rate(row, location):
 
     # corner case: insufficient data found
     if len(sourced_rental_rates) < 3:
-        ws[f'BD{row}'] = "Insufficient data available online"
+        ws[f'BB{row}'] = "Insufficient data available online"
         wb.save('equipment rates.xlsx')
         wb.close()
         return 0
 
     # save found rental rate to excel
     # mean of the middle 50% of found values
-    sourced_rental_rate = round(np.mean(sourced_rental_rates[math.floor(len(sourced_rental_rates)*0.25):math.floor(len(sourced_rental_rates)*0.5)]),2)
+    sourced_rental_rate = round(np.median(sourced_rental_rates),2)
     
     # find if given_operating_rate fits into given data
     near_average = False
@@ -270,12 +274,18 @@ def scrape_sourced_rental_rate(row, location):
             rec = "Consider increase in pricing"
         elif is_extreme_big:
             rec = "Consider decrease in pricing"
-        else:
+        elif given_operating_rate < sourced_rental_rate:
             # not near average but not an extreme
-            rec = "Further research required: given rate appears to fit data but is not near average rental rate."
+            rec = "Further research required: possible slight increase in pricing"
+        else:
+            rec = "Further research required: possible slight decrease in pricing"
 
+    ws[f'BB{row}'] = rec
     ws[f'BC{row}'] = str(sourced_rental_rate)
-    ws[f'BD{row}'] = rec
+    ws[f'BD{row}'] = str(sourced_rental_rates)[1:-1]
+    ws[f'BE{row}'] = f"https://www.google.com/search?q=how much does it cost to rent a {description} {manufacturer} {year} in {location}"
+    ws[f'BI{row}'] = str(datetime.now())
+
     wb.save('equipment rates.xlsx')
     wb.close()
 
