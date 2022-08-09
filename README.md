@@ -31,7 +31,6 @@ Tool for automatically finding current rental prices per hour
 - **"Consider increase/decrease in pricing":** The given price does not fit the data and is well below the median value. This suggests that the price should change to reflect closer to market values
 
 ## Creating the Executable for Windows:
-https://www.zacoding.com/en/post/python-selenium-to-exe/
 ```
 pyinstaller ./main.py --onefile
 ```
