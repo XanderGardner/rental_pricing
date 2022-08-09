@@ -15,11 +15,23 @@ Tool for automatically finding current rental prices per hour
 
 ## Output:
 - Output is in the same excel file named "equipment rates.xlsx" with added columns:
-    - BB: sourced value
-    - BC: sourced rental rate (per hour)
+    - BB: Recommendation
+    - BC: Sourced Rental Rate
+    - BD: Sourced Rental Rates
+    - BE: Rental Rate Source
+    - BF: Sourced Value
+    - BG: Sourced Values
+    - BH: Value Source
+    - BI: Date of Program Execution
+
+### Meaning of Recommendations
+- **"Data supports pricing":** the data found online supports the given pricing
+- **"Insufficient data available online":** there is not enough available data online to draw reasonable conclusions
+- **"Further research required: possible slight increase/decrease in pricing":** The given price fits that data but is not near the median. Further research is required as the online prices found may be linked to simmilar but different type of equipment
+- **"Consider increase/decrease in pricing":** The given price does not fit the data and is well below the median value. This suggests that the price should change to reflect closer to market values
 
 ## Creating the Executable for Windows:
 https://www.zacoding.com/en/post/python-selenium-to-exe/
 ```
-pyinstaller ./main.py --onefile --add-binary "./chromedriver_win32/chromedriver.exe;./chromedriver_win32"
+pyinstaller ./main.py --onefile
 ```
