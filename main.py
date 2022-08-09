@@ -321,11 +321,11 @@ def main():
     wb = pyxl.load_workbook('temp_delete_me.xlsx')
     ws = wb["General"]
     n = ws.max_row - OFFSET_ROWS
+    location = str(ws[f'BA2'].value)
     wb.close()
 
     num_to_scrape = n
     # num_to_scrape = 30
-    location = "California"
     for row in range(OFFSET, num_to_scrape + OFFSET):
         scrape_sourced_value(row)
         scrape_sourced_rental_rate(row, location)
